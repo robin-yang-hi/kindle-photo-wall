@@ -1,0 +1,16 @@
+# 统一换行：shell/lua/config 脚本必须保持 LF——设备端 deploy 有 CRLF 检查，
+# Windows 下克隆若被 autocrlf 转成 CRLF 会被无线部署拒收。
+* text=auto
+*.sh   text eol=lf
+*.lua  text eol=lf
+*.conf text eol=lf
+*.py   text eol=lf
+*.md   text eol=lf
+*.txt  text eol=lf
+
+# 二进制
+*.png  binary
+*.jpg  binary
+*.tgz  binary
+*.ttc  binary
+*.raw  binary

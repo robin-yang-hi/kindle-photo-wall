@@ -1,0 +1,47 @@
+# ---- 个人照片（绝不入库：源图/成品/测试图都排除）----
+render/photos_src/
+render/photos_ready/
+render/photos_1bit/
+render/photos/
+incoming/
+
+# ---- Windows 系统字体副本（版权原因不随仓库分发）----
+# 生成脚本直接引用 C:/Windows/Fonts/msyh*.ttc，本机跑生成器即可
+render/fonts/
+
+# ---- 设备端运行时状态 / 个人配置（各自有 .example 模板）----
+device/env.conf
+device/anniversaries.conf
+device/dash.log
+device/dash.log.*
+device/*.pid
+device/*.new
+device/cmd
+device/shell.cmd
+device/wx.cache
+device/pomodoro.state
+device/.pomo.*
+device/.photo.dims
+device/.count
+device/.fl.orig
+device/.rotate.orig
+device/.ftp.auth
+device/etc.shadow.bak
+device/etc.passwd.bak
+device/web/*.new
+
+# ---- 部署包 / 诊断产物 ----
+# 素材源（render/assets/，5700+ 小文件）不直接入 git，
+# 仓库以打包好的 assets2.tgz 分发（= render/assets 的 tar，设备端 unpack 命令直接解包）
+render/assets/
+diag.txt
+render/weather_cache.json
+testrun/
+
+# ---- 本地预览图 / 调试残留 ----
+render/*.png
+tools/*.png
+tools/*.raw
+render/photos_1bit/
+__pycache__/
+*.pyc
