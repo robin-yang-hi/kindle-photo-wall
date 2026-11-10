@@ -749,6 +749,10 @@ paint_one() {
         return 0
     fi
 
+    # 照片墙帧时间戳：render.sh 靠它判断轮换节拍（按墙钟走），
+    # 进/出番茄钟触发的重绘会如实更新它，计时不会被"归零重等"。
+    date +%s >"$DIR/device/.lastwall" 2>/dev/null
+
     merge_photo_dirs
     photo=$(pick_photo)
 

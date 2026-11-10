@@ -839,7 +839,16 @@ else
             else
                 _pp="$PM_PHASE-$PM_PAUSED"; _t=0; _lim=$_nlim
             fi
-            [ "$_t" -lt "$_lim" ] || break
+            if [ "$PM_PHASE" = "idle" ]; then
+                # 照片墙节拍看"上次照片墙帧"的时间戳（paint2 每画一帧就更新
+                # device/.lastwall），不数 _t —— 否则进/出番茄钟会把计时归零，
+                # 退出后要白等一个完整间隔才轮换（深夜 600s 下感觉就是"再也不刷了"）。
+                _lw=$(cat "$DIR/device/.lastwall" 2>/dev/null)
+                case $_lw in ''|*[!0-9]*) _lw=0 ;; esac
+                [ $(( $(date +%s) - _lw )) -ge "$_lim" ] && break
+            else
+                [ "$_t" -lt "$_lim" ] || break
+            fi
         done
     done
 fi
