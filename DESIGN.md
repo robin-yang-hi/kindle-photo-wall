@@ -151,11 +151,13 @@ render.sh（主循环，PID 记 device/dash.pid）
 ```
 1. clear framebuffer（fbink -b -c）
 2. 番茄钟专注中？→ 整屏交给 paint_pomo_focus，直接返回
-3. 选照片 → contain 等比贴进照片框（上下留白动态分配给信息带）
-4. 上信息带：日期 / 星期 / 农历·节气 / 每日一句（按年内第几天取，207 条）
+3. 选照片 → cover 等比铺满 960×792 照片框（负偏移裁切，无留白；
+                竖图按宽铺满、横向溢出推到屏外，横图按高铺满、纵向溢出落进信息带
+                后用 band_white.png 盖掉），信息带高度固定 140px 不再随照片跳动
+4. 上信息带：日期 / 星期 / 农历·节气 / 每日一句（按年内第几天取，197 条）
 5. 下信息带：时钟(HH:MM) / 天气图标+温度+描述 / 湿度 / 空气质量
 6. 右侧栏 420px：月历(预烤十年模板+今日高亮+纪念日框) / 日出日落 /
-                临近节日倒计时 / 纪念日 / 明日·后日预报 / 电量
+                临近节日 2 条 / 特殊日子 2 条 / 明日·后日预报 / 电量
 7. 最后一个 stamp 触发整屏刷新（fbink -s -W GL16/GC16）
 ```
 
@@ -186,7 +188,7 @@ Kindle 无字体渲染 → 所有文字是电脑预烘焙的 PNG：
 PHOTO_ROTATE_SEC=0 → 按 年内天 % 张数，"每天一张"相框模式
 ```
 
-照片无需预处理尺寸：`img_dims` 读出宽高后 contain 等比缩放贴图（fbink 负责缩放），尺寸缓存 `.photo.dims`。
+照片无需预处理尺寸：`img_dims` 读出宽高后用 cover 等比铺满照片框、负偏移裁切（fbink 只能缩放不能裁源图，靠把溢出部分推到屏外/信息带再盖白底实现），尺寸缓存 `.photo.dims`。信息带高度固定，照片比例变化不会让版式跳动。
 
 #### 天气子系统（`get_wx`）
 
@@ -394,7 +396,7 @@ sh tools/wireless.sh restart | stop | ls | get device/dash.log
 
 ### 7.3 素材总量
 
-约 500 张 PNG：数字 6 档 × 全符号、常用词模数百条、单字图集（纪念日名兜底）、天气图标 11 种、月历 120 张（2026–2035）、每日一句 207 条、翻牌钟 UI 50+ 张。全部 FAT32 兼容命名（大小写不敏感问题见 §3.2）。
+约 500 张 PNG：数字 6 档 × 全符号、常用词模数百条、单字图集（纪念日名兜底）、天气图标 11 种、月历 120 张（2026–2035）、每日一句 197 条、翻牌钟 UI 50+ 张。全部 FAT32 兼容命名（大小写不敏感问题见 §3.2）。
 
 ---
 
@@ -434,6 +436,9 @@ sh tools/wireless.sh restart | stop | ls | get device/dash.log
 | 10 | **防火墙** | FTP 起来了手机就是连不上 | Kindle iptables INPUT 默认 DROP，必须补放行规则 |
 | 11 | **时区** | 设备时钟 UTC，时间差 8 小时 | `TZ=CST-8` POSIX 串导出，不依赖 zoneinfo |
 | 12 | **USB 误判** | 拔线瞬间启动会误判"插着电脑"立刻退出 | 等 `/mnt/us` 挂载回来（≤30s）+ 连续两次判定确认 |
+| 13 | **照片比例跳动** | 竖图 contain 后两侧大留白；换图时上下信息带高度跟着变 | 横屏固定 cover 铺满 + 负偏移裁切；溢出到信息带的部分用 `band_white.png` 盖掉；信息带高度固定 140px。竖图按宽铺满、横图按高铺满，判断依据=「按宽铺满后的高度是否≥照片框高」 |
+| 14 | **浅灰字发虚** | 月历数字/台词出处用 MID(80)/SOFT(110) 灰阶在墨水屏上发虚 | 关键信息一律 INK(0) 纯黑 + 字号≥24；月历数字 26→30、台词出处 SOFT→MID 且字号 20→22 |
+| 15 | **素材重生成卡死** | `make_v2.py` 的 `make_charset` 要逐个 optimize 3800+ 字模，极慢（20 分钟没跑完），卡住时字模已被删一半 | 字模内容没变就别重跑全量：从 `assets2.tgz` 解出 `v2_chars/` 恢复；只调坐标时用设备旧 layout 为基底替换常量行，别用反推宽度重建（SYM_W 会算错一半） |
 
 ---
 
@@ -448,7 +453,7 @@ sh tools/wireless.sh restart | stop | ls | get device/dash.log
 | 刷屏 | `WAVE` / `WAVE_FULL` / `FULL_EVERY` | GL16 / GC16 / 10 | 平时轻刷 / 清残影全刷 / N 帧一次 |
 | 系统 | `STOP_UI` / `FREEZE_APP` / `STOP_POWERD` | 1 / 1 / 0 | 屏幕Ownership 三开关（见 §3.1，一般不动） |
 | 省电 | `WIFI_POWERSAVE` / `EPDC_POWER` / `FRONTLIGHT` | 1 / auto / 0 | WiFi 省电 / EPDC 挂起 / 前置灯亮度 |
-| 照片 | `PHOTO_ROTATE_SEC` / `PHOTO_NEW_WINDOW` / `PHOTO_FIT` | 60 / 650 / contain | 轮换间隔（0=每天）/ 新图优先窗 / contain\|cover |
+| 照片 | `PHOTO_ROTATE_SEC` / `PHOTO_NEW_WINDOW` | 60 / 650 | 轮换间隔（0=每天）/ 新图优先窗；横屏 v2 固定 cover 铺满（竖屏 paint.sh 仍读 PHOTO_FIT） |
 | FTP | `FTP_PORT` / `FTP_USER` / `FTP_PASS` / `FTP_AUTH` | 2121 / root / root / 1 | 手机通道（密码写入系统 shadow，见 §3.1） |
 | 运维 | `ADMIN_PORT` | 2122 | 0=关闭；有写权限，按需 |
 | Web | `ANNIV_WEB` / `ANNIV_WEB_PORT` | 1 / 8080 | 纪念日登记网页 |

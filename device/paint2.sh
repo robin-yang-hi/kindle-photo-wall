@@ -382,10 +382,11 @@ lunar_today() {
 FEST_TMP="$DIR/device/.fest.tmp"
 fest_pick() {
     _t=$(date +%F)
-    awk -F'|' -v t="$_t" '$1>=t {print $1"|"$2}' "$ASSETSDIR/fest.txt" 2>/dev/null | head -3 >"$FEST_TMP"
+    awk -F'|' -v t="$_t" '$1>=t {print $1"|"$2}' "$ASSETSDIR/fest.txt" 2>/dev/null | head -2 >"$FEST_TMP"
 }
 
-ANN_NAME=""; ANN_DATE=""; ANN_DAYS=""; ANN_IS_LUNAR=0
+ANN1_NAME=""; ANN1_DATE=""; ANN1_DAYS=""; ANN1_IS_LUNAR=0
+ANN2_NAME=""; ANN2_DATE=""; ANN2_DAYS=""; ANN2_IS_LUNAR=0
 
 # ---------------- 农历生日支持 ----------------
 # lunar/YYYY.txt 每行：公历MMDD|月名|日名|节气|农历key
@@ -424,11 +425,14 @@ lunar_label_of() {
     awk -F'|' -v k="$_lmd" '$1==k{print $2"|"$3; exit}' "$ASSETSDIR/lunar/$_ly.txt" 2>/dev/null
 }
 
+# 返回最近两条纪念日，分别存 ANN1_* / ANN2_*（_n=1 最近、_n=2 次近）
 anniv_pick() {
     _f="$DIR/device/anniversaries.conf"
+    ANN1_NAME=""; ANN1_DATE=""; ANN1_DAYS=""; ANN1_IS_LUNAR=0
+    ANN2_NAME=""; ANN2_DATE=""; ANN2_DAYS=""; ANN2_IS_LUNAR=0
     [ -f "$_f" ] || return 0
     _ts=$(date -d "$(date +%F)" +%s 2>/dev/null); [ -n "$_ts" ] || return 0
-    _best=999999
+    _b1=999999; _b2=999999
     while read -r _ln; do
         case "$_ln" in ''|\#*) continue ;; esac
         _d0=$(printf '%s' "$_ln" | awk '{print $1}')
@@ -454,8 +458,12 @@ anniv_pick() {
         _s2=$(date -d "$_dd" +%s 2>/dev/null); [ -n "$_s2" ] || continue
         _diff=$(( (_s2 - _ts) / 86400 ))
         [ "$_diff" -ge 0 ] || continue
-        if [ "$_diff" -lt "$_best" ]; then
-            _best=$_diff; ANN_NAME=$_nm; ANN_DATE=$_dd; ANN_DAYS=$_diff; ANN_IS_LUNAR=$_lun
+        # 插入到最近/次近两个槽位
+        if [ "$_diff" -lt "$_b1" ]; then
+            _b2=$_b1; ANN2_NAME=$ANN1_NAME; ANN2_DATE=$ANN1_DATE; ANN2_DAYS=$ANN1_DAYS; ANN2_IS_LUNAR=$ANN1_IS_LUNAR
+            _b1=$_diff; ANN1_NAME=$_nm; ANN1_DATE=$_dd; ANN1_DAYS=$_diff; ANN1_IS_LUNAR=$_lun
+        elif [ "$_diff" -lt "$_b2" ]; then
+            _b2=$_diff; ANN2_NAME=$_nm; ANN2_DATE=$_dd; ANN2_DAYS=$_diff; ANN2_IS_LUNAR=$_lun
         fi
     done <"$_f"
 }
@@ -760,29 +768,43 @@ paint_one() {
     merge_photo_dirs
     photo=$(pick_photo)
 
-    # ---- 照片：contain 进 960x792 照片框，居中 ----
-    _sh=0
+    # ---- 照片：cover 等比铺满 960x792 照片框，负偏移居中裁切（无留白）----
+    # 竖图按宽铺满、竖向往上推；横图按高铺满、横向往左推。
+    # 溢出到上下信息带的部分随后用 band_white.png 盖掉，再画文字。
+    _sh=$PHOTO_BOX_H
     if [ -n "$photo" ]; then
         _iw=$(img_dims "$photo" | cut -d' ' -f1)
         _ih=$(img_dims "$photo" | cut -d' ' -f2)
         case $_iw in ''|*[!0-9]*) _iw=0 ;; esac
         case $_ih in ''|*[!0-9]*) _ih=0 ;; esac
         if [ "$_iw" -le 0 ] || [ "$_ih" -le 0 ]; then
+            # 尺寸解析不出来：强制拉伸铺满，别只露一角
             _sw=$PHOTO_W; _sh=$PHOTO_BOX_H
-        elif [ $(( PHOTO_W * _ih )) -le $(( PHOTO_BOX_H * _iw )) ]; then
-            _sw=$PHOTO_W; _sh=$(( _ih * PHOTO_W / _iw ))
+            _sx=$PHOTO_X; _sy=$PHOTO_BOX_Y
         else
-            _sh=$PHOTO_BOX_H; _sw=$(( _iw * PHOTO_BOX_H / _ih ))
+            # 先按宽度铺满算出高度；比照片区还高→是竖图（按宽铺满、竖向溢出），
+            # 否则是横图（改按高度铺满、横向溢出）。与竖屏版 stamp_photo 同一判断法。
+            _sw=$PHOTO_W; _sh=$(( _ih * PHOTO_W / _iw ))
+            if [ "$_sh" -ge "$PHOTO_BOX_H" ]; then
+                # 竖图：按宽铺满，竖向溢出上下各推一半（落进上下信息带，稍后用白底盖掉）
+                _sx=$PHOTO_X; _sy=$(( PHOTO_BOX_Y - (_sh - PHOTO_BOX_H) / 2 ))
+            else
+                # 横图：按高铺满，横向溢出往左推（照片框左缘=屏幕左缘，推出去落在屏外）
+                _sh=$PHOTO_BOX_H; _sw=$(( _iw * PHOTO_BOX_H / _ih ))
+                _sx=$(( PHOTO_X - (_sw - PHOTO_W) )); _sy=$PHOTO_BOX_Y
+            fi
         fi
-        _sx=$(( PHOTO_X + (PHOTO_W - _sw) / 2 ))
-        _sy=$(( PHOTO_BOX_Y + (PHOTO_BOX_H - _sh) / 2 ))
         if [ "$have_fbink" -eq 1 ]; then
             "$FB" -q -b -g "file=$photo,x=$_sx,y=$_sy,w=$_sw,h=$_sh" >/dev/null 2>>"$LOG"
         fi
-        log "照片: $(basename "$photo") ${_iw}x${_ih} → ${_sw}x${_sh} @(${_sx},${_sy})"
+        log "照片: $(basename "$photo") ${_iw}x${_ih} → ${_sw}x${_sh} @(${_sx},${_sy}) cover铺满"
     else
         log "照片: 目录里没有图片（$PHOTOS_DIR）"
-        _sh=$PHOTO_BOX_H
+    fi
+    # 盖掉 cover 溢出到上下信息带的照片（尺寸未知/没图时也无害）
+    if [ "$have_fbink" -eq 1 ] && [ -f "$ASSETSDIR/band_white.png" ]; then
+        "$FB" -q -b -g "file=$ASSETSDIR/band_white.png,x=0,y=0" >/dev/null 2>>"$LOG"
+        "$FB" -q -b -g "file=$ASSETSDIR/band_white.png,x=0,y=$((H - PHOTO_BOX_Y))" >/dev/null 2>>"$LOG"
     fi
 
     # ---- 番茄钟：休息阶段在照片上叠一个白底徽章（照片墙照常轮换）----
@@ -923,40 +945,46 @@ paint_one() {
             draw_num2 $(( _dx + (3 - _dwid) * DIGIT_W_NUM )) "$_fy" "$_fdays" num >/dev/null
             draw_cn2 "$((_dx + 3 * DIGIT_W_NUM + 6))" "$_fy" "天" tiny 1 >/dev/null
             _i=$((_i + 1))
-            [ "$_i" -gt 3 ] && break
+            [ "$_i" -gt 2 ] && break
         done <"$FEST_TMP"
     fi
     rm -f "$FEST_TMP"
 
     anniv_pick
     draw_cn2 "$COL_X" "$Y_ANN_LABEL" "特殊日子" tiny 4 >/dev/null
-    if [ -n "$ANN_NAME" ]; then
+    _slot=1
+    while [ "$_slot" -le 2 ]; do
+        eval "_an=\$ANN${_slot}_NAME"; eval "_ad=\$ANN${_slot}_DATE"
+        eval "_ada=\$ANN${_slot}_DAYS"; eval "_alu=\$ANN${_slot}_IS_LUNAR"
+        eval "_ay=\$Y_ANN$_slot"
+        [ -n "$_an" ] || { _slot=$((_slot + 1)); continue; }
         # 名称宽度直接用 draw_chars 的返回值：含 ww/yr 这类 ASCII 也算得准
-        _endx=$(draw_chars "$COL_X" "$Y_ANN" "$ANN_NAME" 26)
+        _endx=$(draw_chars "$COL_X" "$_ay" "$_an" 26)
         x=$(( _endx + 16 ))
         [ "$x" -lt "$(( COL_X + 96 ))" ] && x=$(( COL_X + 96 ))
         _lm=""; _ld=""
-        if [ "$ANN_IS_LUNAR" = "1" ]; then
+        if [ "$_alu" = "1" ]; then
             # 农历日子贴「冬月十六」，和公历的「12月24日」形态区分开
-            _lab=$(lunar_label_of "$ANN_DATE")
+            _lab=$(lunar_label_of "$_ad")
             _lm=${_lab%%|*}; _ld=${_lab#*|}
         fi
         if [ -n "$_lm" ] && [ -n "$_ld" ] && [ "$_lm" != "$_ld" ]; then
-            x=$(draw_cn2 "$x" "$Y_ANN" "$_lm" tiny 2)
-            draw_cn2 "$x" "$Y_ANN" "$_ld" tiny 2 >/dev/null
+            x=$(draw_cn2 "$x" "$_ay" "$_lm" tiny 2)
+            draw_cn2 "$x" "$_ay" "$_ld" tiny 2 >/dev/null
         else
-            _am=$(printf '%s' "$ANN_DATE" | cut -d- -f2 | sed 's/^0//')
-            _ad=$(printf '%s' "$ANN_DATE" | cut -d- -f3 | sed 's/^0//')
-            x=$(draw_num2 "$x" "$Y_ANN" "$_am" tiny)
-            x=$(draw_cn2 "$x" "$Y_ANN" "月" tiny 1)
-            x=$(draw_num2 "$x" "$Y_ANN" "$_ad" tiny)
-            draw_cn2 "$x" "$Y_ANN" "日" tiny 1 >/dev/null
+            _am=$(printf '%s' "$_ad" | cut -d- -f2 | sed 's/^0//')
+            _add=$(printf '%s' "$_ad" | cut -d- -f3 | sed 's/^0//')
+            x=$(draw_num2 "$x" "$_ay" "$_am" tiny)
+            x=$(draw_cn2 "$x" "$_ay" "月" tiny 1)
+            x=$(draw_num2 "$x" "$_ay" "$_add" tiny)
+            draw_cn2 "$x" "$_ay" "日" tiny 1 >/dev/null
         fi
         _dx=$(( COL_X + COL_W - 74 ))
-        _dwid=$(echo -n "$ANN_DAYS" | wc -c)
-        draw_num2 $(( _dx + (3 - _dwid) * DIGIT_W_NUM )) "$Y_ANN" "$ANN_DAYS" num >/dev/null
-        draw_cn2 "$((_dx + 3 * DIGIT_W_NUM + 6))" "$Y_ANN" "天" tiny 1 >/dev/null
-    fi
+        _dwid=$(echo -n "$_ada" | wc -c)
+        draw_num2 $(( _dx + (3 - _dwid) * DIGIT_W_NUM )) "$_ay" "$_ada" num >/dev/null
+        draw_cn2 "$((_dx + 3 * DIGIT_W_NUM + 6))" "$_ay" "天" tiny 1 >/dev/null
+        _slot=$((_slot + 1))
+    done
 
     # 明日 / 后日预报
     _t_hi=$(cget D1_HI); _t_lo=$(cget D1_LO); _a_hi=$(cget D2_HI); _a_lo=$(cget D2_LO)

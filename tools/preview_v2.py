@@ -94,18 +94,21 @@ def main():
     out = Path(sys.argv[2]) if len(sys.argv) > 2 else ROOT / "tools" / "preview_v2.png"
     canvas = Image.new("L", (W, H), 255)
 
-    # ---- 照片：contain 进照片框 ----
+    # ---- 照片：cover 铺满照片框（与 paint2.sh 一致），负偏移裁切 ----
     iw, ih = Image.open(photo).size
     pw, boxh, boxy = L("PHOTO_W"), L("PHOTO_BOX_H"), L("PHOTO_BOX_Y")
-    if pw * ih <= boxh * iw:
-        sw, sh = pw, ih * pw // iw
+    sw, sh = pw, ih * pw // iw
+    if sh >= boxh:
+        sx, sy = L("PHOTO_X"), boxy - (sh - boxh) // 2
     else:
         sh, sw = boxh, iw * boxh // ih
-    sx = L("PHOTO_X") + (pw - sw) // 2
-    sy = boxy + (boxh - sh) // 2
+        sx, sy = L("PHOTO_X") - (sw - pw), boxy
     paste_scaled(canvas, photo, sx, sy, sw, sh)
+    # 盖掉溢出到上下信息带的照片（设备用 band_white.png，这里直接填白）
+    canvas.paste(255, (0, 0, int(W), int(boxy)))
+    canvas.paste(255, (0, int(H - boxy), int(W), int(H)))
 
-    TB = (H - sh) // 2
+    TB = boxy   # 信息带高度固定，不再随照片高度变化
     BB = H - TB
     tcy = TB // 2
     bcy = (BB + H) // 2
@@ -129,7 +132,8 @@ def main():
             lunar_line = line
             break
     if lunar_line:
-        _, mon, day, jq = lunar_line.split("|")
+        parts = lunar_line.split("|")
+        _, mon, day, jq = parts[0], parts[1], parts[2], parts[3]
         x = L("LEFT_PAD")
         x = draw_cn(canvas, x, y2, mon, "tiny", 2)
         x = draw_cn(canvas, x, y2, day, "tiny", 2)
@@ -188,7 +192,7 @@ def main():
         d, name = line.split("|")
         if d >= today.isoformat():
             fests.append((dt.date.fromisoformat(d), name))
-        if len(fests) == 3:
+        if len(fests) == 2:
             break
     for i, (d0, name) in enumerate(fests, 1):
         fy = L(f"Y_FEST{i}")
@@ -203,20 +207,23 @@ def main():
         draw_num(canvas, dx + (3 - len(str(days))) * L("DIGIT_W_NUM"), fy, str(days), "num")
         draw_cn(canvas, dx + 3 * L("DIGIT_W_NUM") + 6, fy, "天", "tiny", 1)
 
-    draw_cn(canvas, L("COL_X"), L("Y_ANN_LABEL"), "纪念日", "tiny", 3)
-    ann_name, ann_date, ann_days = "生日", dt.date(today.year, 12, 3), None
-    if ann_date < today:
-        ann_date = dt.date(today.year + 1, 12, 3)
-    ann_days = (ann_date - today).days
-    draw_chars(canvas, L("COL_X"), L("Y_ANN"), ann_name, 26)
-    x = L("COL_X") + 96
-    x = draw_num(canvas, x, L("Y_ANN"), str(ann_date.month), "tiny")
-    x = draw_cn(canvas, x, L("Y_ANN"), "月", "tiny", 1)
-    x = draw_num(canvas, x, L("Y_ANN"), str(ann_date.day), "tiny")
-    draw_cn(canvas, x, L("Y_ANN"), "日", "tiny", 1)
-    dx = L("COL_X") + L("COL_W") - 74
-    draw_num(canvas, dx + (3 - len(str(ann_days))) * L("DIGIT_W_NUM"), L("Y_ANN"), str(ann_days), "num")
-    draw_cn(canvas, dx + 3 * L("DIGIT_W_NUM") + 6, L("Y_ANN"), "天", "tiny", 1)
+    draw_cn(canvas, L("COL_X"), L("Y_ANN_LABEL"), "特殊日子", "tiny", 4)
+    ann_demos = [("生日", 12, 3), ("结婚纪念日", 5, 20)]
+    for i, (ann_name, am, ad) in enumerate(ann_demos, 1):
+        ay = L(f"Y_ANN{i}")
+        ann_date = dt.date(today.year, am, ad)
+        if ann_date < today:
+            ann_date = dt.date(today.year + 1, am, ad)
+        ann_days = (ann_date - today).days
+        draw_chars(canvas, L("COL_X"), ay, ann_name, 26)
+        x = L("COL_X") + 96
+        x = draw_num(canvas, x, ay, str(ann_date.month), "tiny")
+        x = draw_cn(canvas, x, ay, "月", "tiny", 1)
+        x = draw_num(canvas, x, ay, str(ann_date.day), "tiny")
+        draw_cn(canvas, x, ay, "日", "tiny", 1)
+        dx = L("COL_X") + L("COL_W") - 74
+        draw_num(canvas, dx + (3 - len(str(ann_days))) * L("DIGIT_W_NUM"), ay, str(ann_days), "num")
+        draw_cn(canvas, dx + 3 * L("DIGIT_W_NUM") + 6, ay, "天", "tiny", 1)
 
     for i, (lab, lo, hi, ic) in enumerate([("明天", "9", "18", "sun"), ("后天", "8", "14", "rain")], 1):
         fy = L(f"Y_FC{i}")

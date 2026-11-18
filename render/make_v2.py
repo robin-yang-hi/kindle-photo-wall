@@ -52,11 +52,13 @@ BB_HUM_X = 730             # 湿度 / 空气质量
 COL_X, COL_W = 990, 420    # 右侧栏
 CAL_Y, CAL_W, CAL_H = 56, 420, 342
 
-RULES = [424, 492, 726, 842, 958]     # 侧栏横线 y
+RULES = [424, 492, 676, 856, 958]     # 侧栏横线 y（Y_RULE3 下移到节日区下方，给节日2条留位）
 Y_SUNRISE, X_SUNSET = 462, 1200
+# 临近节日 2 条 + 特殊日子 2 条（2026-11 改，各占两行）
 Y_FEST_LABEL = 528
-Y_FEST = [578, 636, 694]
-Y_ANN_LABEL, Y_ANN = 762, 808
+Y_FEST = [578, 636]                    # 原 3 条（578/636/694）→ 2 条
+Y_ANN_LABEL = 702
+Y_ANN = [746, 804]                     # 原单条 808 → 2 条
 Y_FC = [884, 926]
 Y_UPDATE = 1000
 X_BATT = 1288
@@ -245,7 +247,7 @@ def make_calendars(year, fest_map):
         d.text((0, 8), f"{year} 年 {month} 月", font=fnt(SANS, 30), fill=INK, anchor="la")
         d.line((0, 50, CAL_W, 50), fill=INK, width=2)
         for i, wd in enumerate("一二三四五六日"):
-            d.text((CAL_COL * (i + 0.5), 58), wd, font=fnt(SANS, 24), fill=SOFT, anchor="ma")
+            d.text((CAL_COL * (i + 0.5), 58), wd, font=fnt(SANS, 26), fill=MID, anchor="ma")
         py = CAL_HEAD + 22
         marked = fest_map.get((year, month), {})
         for r, week in enumerate(pycal.monthcalendar(year, month)):
@@ -254,10 +256,11 @@ def make_calendars(year, fest_map):
                     continue
                 cx = CAL_COL * (i + 0.5)
                 ty = py + r * CAL_ROW
-                d.text((cx, ty), str(day), font=fnt(SERIF_LAT, 26), fill=MID, anchor="ma")
+                # 数字加深到纯黑、字号 26→30：浅灰(MID/SOFT)在墨水屏上发虚
+                d.text((cx, ty), str(day), font=fnt(SERIF_LAT, 30), fill=INK, anchor="ma")
                 if day in marked:
-                    # 节日小框：空心矩形围着数字（数字无下伸部，26 号字形实际高约 18）
-                    d.rectangle((cx - 26, ty - 6, cx + 26, ty + 26),
+                    # 节日小框跟着放大：30 号字形实际高约 21
+                    d.rectangle((cx - 28, ty - 8, cx + 28, ty + 30),
                                 outline=INK, width=2)
         img.save(d0 / f"{year}-{month:02d}.png", "PNG", optimize=True)
 
@@ -266,8 +269,8 @@ def make_hl():
     d0 = OUT / "v2_hl"
     d0.mkdir(parents=True, exist_ok=True)
     for day in range(1, 32):
-        img = Image.new("L", (52, 36), 0)
-        ImageDraw.Draw(img).text((26, 17), str(day), font=fnt(SERIF_LAT, 26), fill=255, anchor="mm")
+        img = Image.new("L", (52, 38), 0)
+        ImageDraw.Draw(img).text((26, 19), str(day), font=fnt(SERIF_LAT, 30), fill=255, anchor="mm")
         img.save(d0 / f"{day}.png", "PNG", optimize=True)
     # 纪念日边框件：设备端贴 4 条细杆拼成空心框（PNG 带白底会盖住数字，
     # 所以拆成不与数字重叠的细条 —— 与月历里烤进去的节日框同一几何）
@@ -280,6 +283,9 @@ def make_rules():
     img = Image.new("L", (COL_W, 4), BG)
     ImageDraw.Draw(img).line((0, 2, COL_W, 2), fill=LINE, width=2)
     img.save(OUT / "hline420.png", "PNG", optimize=True)
+    # 信息带白底：照片 cover 铺满时会溢出到上下带，贴图后盖一层白底再画文字。
+    # 高度 = PHOTO_BOX_Y(上下各留白)，宽度整屏。
+    Image.new("L", (W, PHOTO_BOX_Y), BG).save(OUT / "band_white.png", "PNG", optimize=True)
 
 
 # ---------------------------------------------------------------- 每日一句
@@ -309,10 +315,11 @@ def make_quotes():
     d0.mkdir(parents=True, exist_ok=True)
     for old in d0.glob("q*.png"):
         old.unlink()
-    f_attr = fnt(SANS, 20)
+    f_attr = fnt(SANS, 22)
     for i, (body, who) in enumerate(items, 1):
         # 画布固定 420x100：最多两行正文 + 行末出处，字号按篇幅自适应
-        for size in (26, 24, 22):
+        # 最小字号 22→24、出处 SOFT→MID：浅灰小字在墨水屏上发虚
+        for size in (28, 26, 24):
             f = fnt(SERIF_CN, size)
             lines = wrap(body, f, QUOTE_W)
             if len(lines) <= 2:
@@ -329,11 +336,15 @@ def make_quotes():
         # 否则会像「世界上只有一种病，就是穷病 —— 我不是药神」那样叠在正文上。
         if attr and last_w + 12 + attr_w <= QUOTE_W:
             d.text((last_w + 12, 6 + (len(lines) - 1) * step + size * 0.55),
-                   attr, font=f_attr, fill=SOFT, anchor="la")
+                   attr, font=f_attr, fill=MID, anchor="la")
         elif attr:
             d.text((QUOTE_W - attr_w, 6 + len(lines) * step),
-                   attr, font=f_attr, fill=SOFT, anchor="la")
+                   attr, font=f_attr, fill=MID, anchor="la")
         img.save(d0 / f"q{i:03d}.png", "PNG", optimize=True)
+        # 画布高只有 100，正文两行 + 出处若超过就记一笔（正常应为空）
+        _bottom = 6 + len(lines) * step + (22 if attr and last_w + 12 + attr_w > QUOTE_W else 0)
+        if _bottom > QUOTE_H:
+            print(f"警告: 台词 q{i:03d} 内容超出画布 {_bottom}>{QUOTE_H}: {body[:20]}")
     return len(items)
 
 
@@ -440,7 +451,8 @@ def write_layout(meta, nq):
         f"Y_SUNRISE={Y_SUNRISE}", f"X_SUNSET={X_SUNSET}",
         f"Y_FEST_LABEL={Y_FEST_LABEL}",
         *[f"Y_FEST{i + 1}={v}" for i, v in enumerate(Y_FEST)],
-        f"Y_ANN_LABEL={Y_ANN_LABEL}", f"Y_ANN={Y_ANN}",
+        f"Y_ANN_LABEL={Y_ANN_LABEL}",
+        *[f"Y_ANN{i + 1}={v}" for i, v in enumerate(Y_ANN)],
         *[f"Y_FC{i + 1}={v}" for i, v in enumerate(Y_FC)],
         f"Y_UPDATE={Y_UPDATE}", f"X_BATT={X_BATT}",
         f"QUOTE_COUNT={nq}",
