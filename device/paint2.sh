@@ -642,6 +642,9 @@ paint_pomo_focus() {
     _den=${POMO_EVERY:-4}; case $_den in ''|*[!0-9]*) _den=4 ;; esac
     [ "$_den" -lt 2 ] && _den=2; [ "$_den" -gt 8 ] && _den=8
     _rn=$(( ${PM_CYCLE:-0} % _den + 1 ))
+    # TOMATO 行改用今日进度（TODAY % den + 1）：与"今日完成"同基准、跨天一起归零。
+    # 左上角 _rn 仍走 CYCLE（历史累计、不跨天清零）来管长休节奏——两者不再共用。
+    _tn=$(( ${PM_TODAY:-0} % _den + 1 ))
     [ -f "$_pui/round_${_den}_${_rn}.png" ] && \
         stamp "$_pui/round_${_den}_${_rn}.png" "$POMO_ROUND_X" "$(( POMO_ROUND_Y - 44 ))"
 
@@ -687,10 +690,11 @@ paint_pomo_focus() {
     stamp "$_pui/bracket_r.png" "$_bx" "$(( POMO_BAR_Y + (POMO_CELL_H - POMO_BR_H) / 2 ))"
     draw_num2 "$((_bx + POMO_BR_W + 20))" "$(( POMO_BAR_Y + POMO_CELL_H ))" "$((_el * 100 / _total))%" date >/dev/null
 
-    # TOMATO 行（当前轮次，与左上角呼应）+ 今日完成行（按天计数）
+    # TOMATO 行 = 今日第几个番茄（按 TODAY，跨天归零，与下面的今日完成同基准）
+    # 左上角"第 N/den 轮" = 历史 CYCLE（不跨天清零，管长休节奏），两者各司其职
     stamp "$_pui/tomato_label.png" "$POMO_TOMATO_X" "$(( POMO_TOMATO_Y - 40 ))"
     stamp "$_pui/tomato_icon.png" "$(( POMO_TOMATO_X + TOMATO_LW + 14 ))" "$(( POMO_TOMATO_Y - 46 ))"
-    draw_num2 "$(( POMO_TOMATO_X + TOMATO_LW + 76 ))" "$POMO_TOMATO_Y" "$_rn" date >/dev/null
+    draw_num2 "$(( POMO_TOMATO_X + TOMATO_LW + 76 ))" "$POMO_TOMATO_Y" "$_tn" date >/dev/null
     stamp "$_pui/done_label.png" "$POMO_TOMATO_X" "$(( POMO_DONE_Y - 40 ))"
     _dx=$(draw_num2 "$(( POMO_TOMATO_X + DONE_LW + 6 ))" "$POMO_DONE_Y" "${PM_TODAY:-0}" date)
     stamp "$_pui/done_tail.png" "$((_dx + 8))" "$(( POMO_DONE_Y - 40 ))"
@@ -724,7 +728,7 @@ paint_pomo_focus() {
     draw_num2 "$_sx" "$_by" "$_ss" huge_k >/dev/null
     printf 'END=%s\nMM=%s\nSS=%s\n' "${PM_END:-0}" "$_mm" "$_ss" >"$_fv"
 
-    log "番茄钟(flip): 剩余 $(pomo_mmss "$_left") 第${_rn}/${_den}轮 今日${PM_TODAY:-0}番茄 进度$((_el * 100 / _total))%"
+    log "番茄钟(flip): 剩余 $(pomo_mmss "$_left") 组第${_rn}/${_den}轮 今日第${_tn}/${_den}个(已完成${PM_TODAY:-0}) 进度$((_el * 100 / _total))%"
     # 自行触发整屏刷新（paint_one 的最后一笔不走）
     echo 0 >/sys/class/graphics/fb0/blank 2>/dev/null
     _cnt=$(cat "$DIR/device/.count" 2>/dev/null || echo 0); _cnt=$((_cnt + 1))
